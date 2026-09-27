@@ -1,0 +1,232 @@
+@model List<Ariza>
+@{
+    ViewData["Title"] = "Dashboard";
+
+    string TurEtiket(ArizaTuru tur) => tur switch
+    {
+        ArizaTuru.Cukur => "Yol Çukuru",
+        ArizaTuru.TasanCopKutusu => "Taşan Çöp Kutusu",
+        ArizaTuru.HasarliTabela => "Hasarlı Tabela",
+        _ => tur.ToString()
+    };
+
+    string TurPill(ArizaTuru tur) => tur switch
+    {
+        ArizaTuru.Cukur => "pill-cukur",
+        ArizaTuru.TasanCopKutusu => "pill-cop",
+        ArizaTuru.HasarliTabela => "pill-tabela",
+        _ => "pill-cukur"
+    };
+
+    string DurumEtiket(ArizaDurumu durum) => durum switch
+    {
+        ArizaDurumu.Bekliyor => "Bekliyor",
+        ArizaDurumu.Onarimda => "Onarımda",
+        ArizaDurumu.Cozuldu => "Çözüldü",
+        _ => durum.ToString()
+    };
+
+    string DurumRenkHex(ArizaDurumu durum) => durum switch
+    {
+        ArizaDurumu.Bekliyor => "#fab219",
+        ArizaDurumu.Onarimda => "#a78bfa",
+        ArizaDurumu.Cozuldu => "#22c55e",
+        _ => "#fab219"
+    };
+
+    string SiddetEtiket(ArizaSiddeti siddet) => siddet switch
+    {
+        ArizaSiddeti.Kucuk => "Küçük",
+        ArizaSiddeti.Orta => "Orta",
+        ArizaSiddeti.Buyuk => "Büyük",
+        _ => siddet.ToString()
+    };
+
+    string SiddetPill(ArizaSiddeti siddet) => siddet switch
+    {
+        ArizaSiddeti.Kucuk => "pill-siddet-kucuk",
+        ArizaSiddeti.Orta => "pill-siddet-orta",
+        ArizaSiddeti.Buyuk => "pill-siddet-buyuk",
+        _ => "pill-siddet-kucuk"
+    };
+
+    var haritaNoktalari = Model
+        .Where(a => a.Enlem.HasValue && a.Boylam.HasValue)
+        .Select(a => new
+        {
+            id = a.Id,
+            enlem = a.Enlem,
+            boylam = a.Boylam,
+            tur = TurEtiket(a.ArizaTuru),
+            durum = DurumEtiket(a.Durum),
+            renk = DurumRenkHex(a.Durum),
+            foto = a.FotografYolu,
+            zaman = a.TespitZamani.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+        });
+}
+
+<div class="row mb-3 g-3">
+    <div class="col-6 col-lg-3">
+        <div class="stat-tile total">
+            <span class="icon-box">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </span>
+            <div>
+                <div class="label">Toplam Arıza</div>
+                <div class="value">@ViewBag.ToplamSayi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-tile bekliyor">
+            <span class="icon-box">
+                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <div>
+                <div class="label">Bekliyor</div>
+                <div class="value">@ViewBag.BekliyorSayi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-tile onarim">
+            <span class="icon-box">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M14.5 6.5a3.5 3.5 0 10-4.9 4.9L4 17l3 3 5.6-5.6a3.5 3.5 0 004.9-4.9l-2.3 2.3-2-2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </span>
+            <div>
+                <div class="label">Onarımda</div>
+                <div class="value">@ViewBag.OnarimdaSayi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-tile cozuldu">
+            <span class="icon-box">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div>
+                <div class="label">Çözüldü</div>
+                <div class="value">@ViewBag.CozulduSayi</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="map-card mb-3">
+    <div class="map-head">
+        <h6>Arıza Konum Haritası</h6>
+        <span class="geo-tag">@haritaNoktalari.Count() konum işaretli</span>
+    </div>
+    <div id="arizaHarita"></div>
+    <div class="map-legend">
+        <span><span class="dot" style="background:#fab219;"></span>Bekliyor</span>
+        <span><span class="dot" style="background:#a78bfa;"></span>Onarımda</span>
+        <span><span class="dot" style="background:#22c55e;"></span>Çözüldü</span>
+    </div>
+</div>
+
+<div class="filter-bar mb-3">
+    <form method="get" asp-action="Index" class="row g-3 align-items-end">
+        <div class="col-auto">
+            <label class="d-block">Arıza Türü</label>
+            <select name="tur" class="form-select form-select-sm">
+                <option value="">Tümü</option>
+                @foreach (var t in Enum.GetValues<ArizaTuru>())
+                {
+                    <option value="@t" selected="@(ViewBag.SeciliTur?.Equals(t) == true)">@TurEtiket(t)</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="d-block">Durum</label>
+            <select name="durum" class="form-select form-select-sm">
+                <option value="">Tümü</option>
+                @foreach (var d in Enum.GetValues<ArizaDurumu>())
+                {
+                    <option value="@d" selected="@(ViewBag.SeciliDurum?.Equals(d) == true)">@DurumEtiket(d)</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-accent px-3">Filtrele</button>
+            <a asp-action="Index" class="btn btn-sm btn-ghost">Temizle</a>
+        </div>
+    </form>
+</div>
+
+<div class="panel">
+    <div class="table-responsive">
+        <table class="table data-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Fotoğraf</th>
+                    <th>Arıza Türü</th>
+                    <th>Şiddet</th>
+                    <th>Konum</th>
+                    <th>Tespit Zamanı</th>
+                    <th>Güven</th>
+                    <th>Durum</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="7" class="text-center py-4" style="color:var(--text-muted);">Kayıt bulunamadı.</td></tr>
+                }
+                else
+                {
+                    @foreach (var ariza in Model)
+                    {
+                        <tr>
+                            <td style="width:110px;">
+                                @if (!string.IsNullOrWhiteSpace(ariza.FotografYolu))
+                                {
+                                    <a href="@ariza.FotografYolu" target="_blank">
+                                        <img src="@ariza.FotografYolu" alt="@TurEtiket(ariza.ArizaTuru)" class="thumb-img" />
+                                    </a>
+                                }
+                                else
+                                {
+                                    <div class="thumb-empty">Görsel yok</div>
+                                }
+                            </td>
+                            <td><span class="pill @TurPill(ariza.ArizaTuru)">@TurEtiket(ariza.ArizaTuru)</span></td>
+                            <td>
+                                @if (ariza.Siddet.HasValue)
+                                {
+                                    <span class="pill @SiddetPill(ariza.Siddet.Value)">@SiddetEtiket(ariza.Siddet.Value)</span>
+                                }
+                                else
+                                {
+                                    <span class="geo-tag">—</span>
+                                }
+                            </td>
+                            <td>
+                                @if (ariza.Enlem.HasValue && ariza.Boylam.HasValue)
+                                {
+                                    <span class="geo-tag">@ariza.Enlem?.ToString("0.0000"), @ariza.Boylam?.ToString("0.0000")</span>
+                                }
+                                else
+                                {
+                                    <span class="geo-tag">—</span>
+                                }
+                            </td>
+                            <td>@ariza.TespitZamani.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                            <td class="conf-text">@(ariza.GuvenSkoru.HasValue ? $"%{ariza.GuvenSkoru.Value * 100:0}" : "-")</td>
+                            <td>
+                                <select class="form-select form-select-sm durum-select" data-id="@ariza.Id">
+                                    @foreach (var d in Enum.GetValues<ArizaDurumu>())
+                                    {
+                                        <option value="@d" selected="@(ariza.Durum == d)">@DurumEtiket(d)</option>
+                                    }
+                                </select>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script id="harita-verisi" type="application/json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(haritaNoktalari))</script>

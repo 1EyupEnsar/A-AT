@@ -1,0 +1,26 @@
+@{
+    ViewData["Title"] = "Yönetici Girişi";
+}
+
+<div class="login-wrap">
+    <div class="login-card">
+        <div class="login-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM8 9V7a4 4 0 118 0v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h5>Yönetim Paneli</h5>
+        <p class="text-muted-sm">Kayıtları manuel düzenlemek için şifre gerekli.</p>
+
+        @if (ViewBag.Hata != null)
+        {
+            <div class="login-error">@ViewBag.Hata</div>
+        }
+
+        <form method="post" asp-action="Login" asp-route-returnUrl="@ViewBag.ReturnUrl">
+            @Html.AntiForgeryToken()
+            <input type="password" name="sifre" class="form-control mb-3" placeholder="Şifre" autofocus required />
+            <button type="submit" class="btn btn-accent w-100">Giriş Yap</button>
+        </form>
+
+        <a asp-controller="Dashboard" asp-action="Index" class="back-link">← Panele geri dön</a>
+    </div>
+</div>

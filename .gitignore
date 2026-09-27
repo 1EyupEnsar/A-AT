@@ -1,0 +1,42 @@
+# .NET
+backend/ArizaTakipSistemi/bin/
+backend/ArizaTakipSistemi/obj/
+backend/ArizaTakipSistemi/ariza.db
+backend/ArizaTakipSistemi/wwwroot/uploads/*.jpg
+backend/ArizaTakipSistemi/*.log
+
+# Python
+python-detector/.venv/
+python-detector/__pycache__/
+python-detector/dataset/
+python-detector/dataset_raw/
+python-detector/runs/
+python-detector/weights/
+python-detector/videos/
+python-detector/yolov8n.pt
+python-detector/yolov8s.pt
+python-detector/*.avi
+python-detector/*.log
+python-detector/*_log*.txt
+python-detector/*_test.txt
+
+# models/ altindaki HER .pt dosyasi varsayilan olarak haric (eski/yedek
+# agirliklar dahil), sadece asagidaki 3 GUNCEL uzman model ISTISNA -
+# bunlar projenin gercek ciktisi, repoya dahil edilir (her biri ~6MB,
+# GitHub limitinin cok altinda)
+python-detector/models/*.pt
+!python-detector/models/best_cukur.pt
+!python-detector/models/best_tabela.pt
+!python-detector/models/best_cop.pt
+
+# Eski/tekrar uretilen test ciktilari (proje kokunde yanlislikla birikmis)
+*.avi
+
+# Yerine daha yenisi gelen, artik kullanilmayan eski scriptler (bkz. README) -
+# diskte referans icin kaliyor ama repoya dahil edilmiyor
+python-detector/train.py
+python-detector/merge_dataset.py
+python-detector/build_test_video.py
+python-detector/build_test_video_v2.py
+
+!**/.gitkeep

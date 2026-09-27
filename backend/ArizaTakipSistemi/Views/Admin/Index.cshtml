@@ -1,0 +1,154 @@
+@model List<Ariza>
+@{
+    ViewData["Title"] = "Yönetim Paneli";
+
+    string TurEtiket(ArizaTuru tur) => tur switch
+    {
+        ArizaTuru.Cukur => "Yol Çukuru",
+        ArizaTuru.TasanCopKutusu => "Taşan Çöp Kutusu",
+        ArizaTuru.HasarliTabela => "Hasarlı Tabela",
+        _ => tur.ToString()
+    };
+
+    string TurPill(ArizaTuru tur) => tur switch
+    {
+        ArizaTuru.Cukur => "pill-cukur",
+        ArizaTuru.TasanCopKutusu => "pill-cop",
+        ArizaTuru.HasarliTabela => "pill-tabela",
+        _ => "pill-cukur"
+    };
+
+    string DurumEtiket(ArizaDurumu durum) => durum switch
+    {
+        ArizaDurumu.Bekliyor => "Bekliyor",
+        ArizaDurumu.Onarimda => "Onarımda",
+        ArizaDurumu.Cozuldu => "Çözüldü",
+        _ => durum.ToString()
+    };
+
+    string SiddetEtiket(ArizaSiddeti siddet) => siddet switch
+    {
+        ArizaSiddeti.Kucuk => "Küçük",
+        ArizaSiddeti.Orta => "Orta",
+        ArizaSiddeti.Buyuk => "Büyük",
+        _ => siddet.ToString()
+    };
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+        <h5 class="mb-0">Yönetim Paneli</h5>
+        <span class="text-muted-sm">Kayıtları manuel olarak ekle, düzenle veya sil.</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Ekle" class="btn btn-accent btn-sm px-3">+ Yeni Kayıt Ekle</a>
+        <a asp-controller="Dashboard" asp-action="Index" class="btn btn-ghost btn-sm">Panele Dön</a>
+        <form method="post" asp-controller="Account" asp-action="Logout" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-ghost btn-sm">Çıkış Yap</button>
+        </form>
+    </div>
+</div>
+
+@if (TempData["Mesaj"] != null)
+{
+    <div class="admin-flash">@TempData["Mesaj"]</div>
+}
+
+<div class="filter-bar mb-3">
+    <form method="get" asp-action="Index" class="row g-3 align-items-end">
+        <div class="col-auto">
+            <label class="d-block">Arıza Türü</label>
+            <select name="tur" class="form-select form-select-sm">
+                <option value="">Tümü</option>
+                @foreach (var t in Enum.GetValues<ArizaTuru>())
+                {
+                    <option value="@t" selected="@(ViewBag.SeciliTur?.Equals(t) == true)">@TurEtiket(t)</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="d-block">Durum</label>
+            <select name="durum" class="form-select form-select-sm">
+                <option value="">Tümü</option>
+                @foreach (var d in Enum.GetValues<ArizaDurumu>())
+                {
+                    <option value="@d" selected="@(ViewBag.SeciliDurum?.Equals(d) == true)">@DurumEtiket(d)</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-accent px-3">Filtrele</button>
+            <a asp-action="Index" class="btn btn-sm btn-ghost">Temizle</a>
+        </div>
+    </form>
+</div>
+
+<div class="panel">
+    <div class="table-responsive">
+        <table class="table data-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Fotoğraf</th>
+                    <th>Arıza Türü</th>
+                    <th>Şiddet</th>
+                    <th>Konum</th>
+                    <th>Tespit Zamanı</th>
+                    <th>Güven</th>
+                    <th>Durum</th>
+                    <th>İşlemler</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="9" class="text-center py-4" style="color:var(--text-muted);">Kayıt bulunamadı.</td></tr>
+                }
+                else
+                {
+                    @foreach (var ariza in Model)
+                    {
+                        <tr>
+                            <td class="conf-text">#@ariza.Id</td>
+                            <td style="width:110px;">
+                                @if (!string.IsNullOrWhiteSpace(ariza.FotografYolu))
+                                {
+                                    <a href="@ariza.FotografYolu" target="_blank">
+                                        <img src="@ariza.FotografYolu" alt="@TurEtiket(ariza.ArizaTuru)" class="thumb-img" />
+                                    </a>
+                                }
+                                else
+                                {
+                                    <div class="thumb-empty">Görsel yok</div>
+                                }
+                            </td>
+                            <td><span class="pill @TurPill(ariza.ArizaTuru)">@TurEtiket(ariza.ArizaTuru)</span></td>
+                            <td>@(ariza.Siddet.HasValue ? SiddetEtiket(ariza.Siddet.Value) : "—")</td>
+                            <td>
+                                @if (ariza.Enlem.HasValue && ariza.Boylam.HasValue)
+                                {
+                                    <span class="geo-tag">@ariza.Enlem?.ToString("0.0000"), @ariza.Boylam?.ToString("0.0000")</span>
+                                }
+                                else
+                                {
+                                    <span class="geo-tag">—</span>
+                                }
+                            </td>
+                            <td>@ariza.TespitZamani.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                            <td class="conf-text">@(ariza.GuvenSkoru.HasValue ? $"%{ariza.GuvenSkoru.Value * 100:0}" : "-")</td>
+                            <td>@DurumEtiket(ariza.Durum)</td>
+                            <td class="d-flex gap-2">
+                                <a asp-action="Duzenle" asp-route-id="@ariza.Id" class="btn btn-ghost btn-sm">Düzenle</a>
+                                <form method="post" asp-action="Sil" asp-route-id="@ariza.Id" onsubmit="return confirm('#@ariza.Id numaralı kayıt kalıcı olarak silinsin mi?');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-danger-soft btn-sm">Sil</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

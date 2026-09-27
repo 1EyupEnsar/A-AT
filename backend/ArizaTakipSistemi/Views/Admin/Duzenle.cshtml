@@ -1,0 +1,85 @@
+@model Ariza
+@{
+    ViewData["Title"] = $"#{Model.Id} Düzenle";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0">#@Model.Id Numaralı Kaydı Düzenle</h5>
+    <a asp-action="Index" class="btn btn-ghost btn-sm">← Listeye Dön</a>
+</div>
+
+<div class="panel p-4" style="max-width:640px;">
+    <form method="post" asp-action="Duzenle" asp-route-id="@Model.Id" enctype="multipart/form-data">
+        @Html.AntiForgeryToken()
+
+        @if (!string.IsNullOrWhiteSpace(Model.FotografYolu))
+        {
+            <div class="mb-3">
+                <label class="form-label-sm">Mevcut Fotoğraf</label><br />
+                <img src="@Model.FotografYolu" class="thumb-img" style="width:160px;height:110px;" />
+            </div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label-sm">Fotoğrafı Değiştir (opsiyonel)</label>
+            <input type="file" name="fotografDosyasi" accept="image/*" class="form-control" />
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label-sm">Arıza Türü</label>
+                <select name="ArizaTuru" class="form-select">
+                    @foreach (var t in Enum.GetValues<ArizaTuru>())
+                    {
+                        <option value="@t" selected="@(Model.ArizaTuru == t)">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label-sm">Durum</label>
+                <select name="Durum" class="form-select">
+                    @foreach (var d in Enum.GetValues<ArizaDurumu>())
+                    {
+                        <option value="@d" selected="@(Model.Durum == d)">@d</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label-sm">Şiddet</label>
+                <select name="Siddet" class="form-select">
+                    <option value="">— (yok)</option>
+                    @foreach (var s in Enum.GetValues<ArizaSiddeti>())
+                    {
+                        <option value="@s" selected="@(Model.Siddet == s)">@s</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label-sm">Güven Skoru (0-1)</label>
+                <input type="number" name="GuvenSkoru" value="@Model.GuvenSkoru" step="0.01" min="0" max="1" class="form-control" />
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label-sm">Enlem</label>
+                <input type="number" name="Enlem" value="@Model.Enlem" step="0.000001" class="form-control" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label-sm">Boylam</label>
+                <input type="number" name="Boylam" value="@Model.Boylam" step="0.000001" class="form-control" />
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label-sm">Tespit Zamanı</label>
+            <input type="datetime-local" name="TespitZamani" value="@Model.TespitZamani.ToString("yyyy-MM-ddTHH:mm")" class="form-control" />
+        </div>
+
+        <button type="submit" class="btn btn-accent px-4">Kaydet</button>
+        <a asp-action="Index" class="btn btn-ghost">Vazgeç</a>
+    </form>
+</div>
