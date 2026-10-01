@@ -1,0 +1,72 @@
+@{
+    ViewData["Title"] = "Video Testi";
+
+    string TurEtiket(string tur) => tur switch
+    {
+        "Cukur" => "Çukur",
+        "HasarliTabela" => "Hasarlı Tabela",
+        "TasanCopKutusu" => "Taşan Çöp Kutusu",
+        _ => tur
+    };
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h5 class="mb-0">Video Testi</h5>
+        <span class="text-muted-sm">Bir video yükle, 3 uzman modelin üzerinden nasıl geçtiğini izle. Bu ekran panele hiçbir kayıt göndermez, sadece görsel bir testtir.</span>
+    </div>
+    <a asp-action="Index" class="btn btn-ghost btn-sm">← Listeye Dön</a>
+</div>
+
+@if (ViewBag.Hata != null)
+{
+    <div class="login-error mb-3">@ViewBag.Hata</div>
+}
+
+<div class="panel p-4 mb-3" style="max-width:640px;">
+    <form method="post" asp-action="VideoTesti" enctype="multipart/form-data" id="video-test-form">
+        @Html.AntiForgeryToken()
+        <div class="mb-3">
+            <label class="form-label-sm">Video Dosyası</label>
+            <input type="file" name="videoDosyasi" accept="video/*" class="form-control" required />
+        </div>
+        <button type="submit" class="btn btn-accent px-4" id="video-test-buton">Test Et</button>
+        <span id="video-test-yukleniyor" class="text-muted-sm ms-2" style="display:none;">
+            İşleniyor, video uzunluğuna göre bir kaç dakika sürebilir…
+        </span>
+    </form>
+</div>
+
+@if (ViewBag.VideoUrl != null)
+{
+    <div class="panel p-4" style="max-width:900px;">
+        <h6 class="mb-3">Sonuç</h6>
+
+        @{
+            var tespitler = ViewBag.Tespitler as Dictionary<string, int>;
+        }
+        @if (tespitler != null)
+        {
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <span class="geo-tag">@ViewBag.KareSayisi kare işlendi</span>
+                @foreach (var kv in tespitler)
+                {
+                    <span class="pill pill-cukur">@TurEtiket(kv.Key): @kv.Value</span>
+                }
+            </div>
+        }
+
+        <video controls preload="metadata" style="width:100%;border-radius:12px;border:1px solid var(--border-strong);" src="@ViewBag.VideoUrl">
+            Tarayıcın video etiketini desteklemiyor.
+        </video>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        document.getElementById('video-test-form').addEventListener('submit', function () {
+            document.getElementById('video-test-buton').disabled = true;
+            document.getElementById('video-test-yukleniyor').style.display = 'inline';
+        });
+    </script>
+}

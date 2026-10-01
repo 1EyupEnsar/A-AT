@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -121,6 +123,97 @@ public class AdminController : Controller
         await _context.SaveChangesAsync();
         TempData["Mesaj"] = $"#{id} numaralı kayıt silindi.";
         return RedirectToAction(nameof(Index));
+    }
+
+    public IActionResult VideoTesti()
+    {
+        return View();
+    }
+
+    /// <summary>
+    /// Yuklenen videoyu python-detector/web_video_test.py'ye gonderir: script
+    /// 3 uzman modeli video uzerinde calistirir, kutucuklu/etiketli sonucu
+    /// tarayicida oynatilabilen bir mp4 olarak wwwroot/video-testleri altina
+    /// yazar. Bu, main.py'nin aksine backend'e API uzerinden HICBIR KAYIT
+    /// GONDERMEZ - salt gorsel bir "modelim bu videoda ne goruyor" testidir.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(500_000_000)]
+    public async Task<IActionResult> VideoTesti(IFormFile? videoDosyasi)
+    {
+        if (videoDosyasi is not { Length: > 0 })
+        {
+            ViewBag.Hata = "Lütfen bir video dosyası seç.";
+            return View();
+        }
+
+        var kokDizin = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "..", "..", "python-detector"));
+        var pythonExe = Path.Combine(kokDizin, ".venv", "Scripts", "python.exe");
+        var script = Path.Combine(kokDizin, "web_video_test.py");
+
+        var girdiKlasoru = Path.Combine(kokDizin, "videos", "web_yuklenen");
+        Directory.CreateDirectory(girdiKlasoru);
+        var girdiYolu = Path.Combine(girdiKlasoru, $"{Guid.NewGuid():N}{Path.GetExtension(videoDosyasi.FileName)}");
+
+        using (var stream = new FileStream(girdiYolu, FileMode.Create))
+        {
+            await videoDosyasi.CopyToAsync(stream);
+        }
+
+        var ciktiKlasoru = Path.Combine(_env.WebRootPath, "video-testleri");
+        Directory.CreateDirectory(ciktiKlasoru);
+        var ciktiAdi = $"{Guid.NewGuid():N}.mp4";
+        var ciktiYolu = Path.Combine(ciktiKlasoru, ciktiAdi);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            WorkingDirectory = kokDizin,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add(script);
+        psi.ArgumentList.Add(girdiYolu);
+        psi.ArgumentList.Add(ciktiYolu);
+
+        string stdout, stderr;
+        int cikisKodu;
+        using (var process = Process.Start(psi)!)
+        {
+            stdout = await process.StandardOutput.ReadToEndAsync();
+            stderr = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            cikisKodu = process.ExitCode;
+        }
+
+        System.IO.File.Delete(girdiYolu);
+
+        var sonSatir = stdout.Trim().Split('\n').LastOrDefault(l => l.TrimStart().StartsWith("{"));
+        VideoTestSonucu? sonuc = null;
+        if (sonSatir != null)
+        {
+            try { sonuc = JsonSerializer.Deserialize<VideoTestSonucu>(sonSatir); }
+            catch (JsonException) { /* asagida hata olarak ele alinacak */ }
+        }
+
+        if (sonuc?.Hata != null)
+        {
+            ViewBag.Hata = sonuc.Hata;
+            return View();
+        }
+        if (sonuc is null || cikisKodu != 0)
+        {
+            ViewBag.Hata = "Video işlenemedi. Ayrıntı: " + (string.IsNullOrWhiteSpace(stderr) ? "(bilinmiyor)" : stderr[..Math.Min(500, stderr.Length)]);
+            return View();
+        }
+
+        ViewBag.VideoUrl = $"/video-testleri/{ciktiAdi}";
+        ViewBag.Tespitler = sonuc.Tespitler;
+        ViewBag.KareSayisi = sonuc.KareSayisi;
+        return View();
     }
 
     private async Task<string> FotografiKaydet(IFormFile dosya, ArizaTuru tur)

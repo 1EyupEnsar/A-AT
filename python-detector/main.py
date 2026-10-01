@@ -2,9 +2,9 @@
 Akilli Sehir Altyapi Ariza Tespit Sistemi - Goruntu Isleme Servisi
 ====================================================================
 
-Bir video akisini (dosya veya kamera) okur, YOLOv8 ile 3 altyapi
-arizasindan (yol cukuru, tasan cop kutusu, hasarli trafik levhasi)
-birini tespit ettiginde:
+Bir video akisini (dosya veya kamera) okur, YOLOv8 ile altyapi
+arizalarindan (yol cukuru, hasarli trafik levhasi, kasis bozuklugu,
+yaya gecidi cizgi bozuklugu/kullanilmazligi) birini tespit ettiginde:
 
   1) Tespit edilen bolgeyi kareden kirpip .jpg olarak kaydeder,
   2) Backend'e (ASP.NET Core) JSON POST istegi atarak kaydi olusturur.
@@ -28,6 +28,7 @@ import requests
 from ultralytics import YOLO
 
 import config
+import gecit_analiz
 
 
 class KonumSimulatoru:
@@ -124,6 +125,38 @@ def siddet_hesapla(
     return "Buyuk"
 
 
+def poligon_alani(xy) -> float:
+    """Bir maske poligonunun (piksel koordinatlarinda, Nx2 dizi) alanini
+    Shoelace formuluyle hesaplar."""
+    x = xy[:, 0]
+    y = xy[:, 1]
+    return 0.5 * abs(
+        (x * (y[list(range(1, len(y))) + [0]] - y[list(range(-1, len(y) - 1))])).sum()
+    )
+
+
+def siddet_hesapla_maskeden(
+    ariza_turu: str, maske_xy, kare_genislik: int, kare_yukseklik: int,
+) -> str | None:
+    """siddet_hesapla ile AYNI esikleri kullanir, ama kutu alani yerine
+    segmentasyon modelinin urettigi GERCEK maske poligon alanini kullanir
+    (bkz. Madde 8 - Kaggle'daki fikrin tam uygulamasi: kutu yerine gercek
+    piksel segmentasyonu). Sadece segmentasyon maskesi mevcutsa (yani Cukur
+    modeli yolov8n-SEG ise) cagrilir; digerlerinde siddet_hesapla (kutu
+    tabanli) kullanilmaya devam eder."""
+    if ariza_turu not in config.SIDDET_UYGULANACAK_TURLER:
+        return None
+    kare_alani = kare_genislik * kare_yukseklik
+    if kare_alani <= 0 or maske_xy is None or len(maske_xy) < 3:
+        return None
+    oran = poligon_alani(maske_xy) / kare_alani
+    if oran < config.SIDDET_ESIK_KUCUK_ORTA:
+        return "Kucuk"
+    if oran < config.SIDDET_ESIK_ORTA_BUYUK:
+        return "Orta"
+    return "Buyuk"
+
+
 def iki_konum_mesafesi_metre(enlem1, boylam1, enlem2, boylam2):
     """Kucuk mesafeler (sehir ici) icin duzlem yaklasimiyla iki enlem/boylam
     arasindaki mesafeyi metre cinsinden hesaplar (haversine gerektirmeyecek
@@ -194,20 +227,53 @@ def api_ye_gonder(
         return False
 
 
-def bir_tespiti_isle(frame, ariza_turu, kutu, cooldown, konum):
+def bir_tespiti_isle(frame, model_adi, kutu, cooldown, konum, maske_xy=None):
     """Tek bir modelin dondurdugu tek bir kutuyu isler: filtre, onizleme,
     soguma, kirpma, siddet, API gonderimi. Ucu uzman model icin de ayni
-    mantik kullanilir, sadece girdi kutusu farkli modelden gelir."""
+    mantik kullanilir, sadece girdi kutusu farkli modelden gelir.
+
+    model_adi: config.MODEL_PATHS'teki anahtar (orn. "Kasis"). Modelin
+    KENDI sinif id'si (kutu.cls), config.MODEL_SINIF_ADLARI[model_adi]
+    listesi uzerinden GERCEK ariza turu adina (orn. "KasisBozuk" ya da
+    "GecitBozuk") cevrilir - Cukur/HasarliTabela tek sinifli oldugu icin
+    bu onlarda hep ayni ismi dondurur, davranis degismez.
+
+    maske_xy: Cukur modeli segmentasyon modeliyse (yolov8n-seg), o tespitin
+    GERCEK piksel maskesinin poligon koordinatlari (Madde 8); verilmezse
+    (None) kutu-alani tabanli eski yonteme (siddet_hesapla) geri dusulur."""
+    sinif_id = int(kutu.cls[0])
+    ariza_turu = config.MODEL_SINIF_ADLARI[model_adi][sinif_id]
+
     guven = float(kutu.conf[0])
+    guven_esigi = config.MIN_GUVEN_ESIKLERI.get(ariza_turu, config.CONFIDENCE_THRESHOLD)
+    if guven < guven_esigi:
+        # Bu sinif icin genel esikten (MODEL_PREDICT_CONF) gecmis ama sinif
+        # bazli, daha siki esigi gecemedi (bkz. config.py MIN_GUVEN_ESIKLERI).
+        return
+
     x1, y1, x2, y2 = kutu.xyxy[0].tolist()
     genislik = x2 - x1
     yukseklik = y2 - y1
 
-    if ariza_turu in config.EN_BOY_FILTRESI_UYGULANACAK_TURLER:
-        if yukseklik <= 0 or (genislik / yukseklik) < config.MIN_EN_BOY_ORANI:
-            # Dikine/uzun bir kutu -- muhtemelen yuruyen bir insan,
-            # motosikletli veya arac; cukurlarla karistirilmasin diye atla.
+    esik = config.MIN_EN_BOY_ORANLARI.get(ariza_turu)
+    if esik is not None:
+        if yukseklik <= 0 or (genislik / yukseklik) < esik:
+            # Beklenen en/boy oranina uymuyor -- Cukur icin dikine/uzun bir
+            # insan/arac siluetiyse, Kasis/GecitBozuk icin kompakt/yuvarlaga
+            # yakin bir cukur/logar siluetiyse atla (bkz. config.py notu).
             return
+
+    if ariza_turu == "YayaGecidi":
+        # YOLO sadece KONUMU buldu (bkz. config.py notu); BOZUKLUK DURUMU
+        # klasik beyaz-piksel-orani analiziyle belirlenir. "Cok temkinli ol"
+        # ilkesi geregi SADECE skor cok dusukse (asiri asinmis/silinmis)
+        # raporlanir; saglam ya da orta derecede asinmis gecitler (yanlis
+        # pozitif riskini dusurmek icin) hic raporlanmaz.
+        kirpik_analiz = kareyi_kirp(frame, x1, y1, x2, y2, pay=10)
+        skor = gecit_analiz.cizgi_gorunurlugu_skoru(kirpik_analiz)
+        if skor >= config.GECIT_KULLANILAMAZ_ESIK:
+            return  # Saglam/belirsiz -- ariza degil, raporlanmaz.
+        ariza_turu = "GecitKullanilamaz"
 
     if config.SHOW_PREVIEW:
         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
@@ -236,7 +302,10 @@ def bir_tespiti_isle(frame, ariza_turu, kutu, cooldown, konum):
         return
 
     kare_yukseklik, kare_genislik = frame.shape[:2]
-    siddet = siddet_hesapla(ariza_turu, genislik, yukseklik, kare_genislik, kare_yukseklik)
+    if maske_xy is not None:
+        siddet = siddet_hesapla_maskeden(ariza_turu, maske_xy, kare_genislik, kare_yukseklik)
+    else:
+        siddet = siddet_hesapla(ariza_turu, genislik, yukseklik, kare_genislik, kare_yukseklik)
 
     fotograf_yolu = goruntuyu_kaydet(kirpik, ariza_turu)
     api_ye_gonder(ariza_turu, fotograf_yolu, guven, enlem, boylam, siddet)
@@ -275,12 +344,26 @@ def main():
 
             # Her uzman model kendi turunu ariyor; her biri kareyi ayri
             # ayri, birbirinden habersiz sekilde degerlendiriyor.
-            for ariza_turu, model in modeller:
+            #
+            # NOT: Bu dongu bilincli olarak SIRALIDIR. Thread havuzuyla
+            # GERCEK paralel calistirma denendi (bkz. coklu_model.py, artik
+            # kullanilmiyor) ve olculdu: paralel yontem kare basina 40,6ms'den
+            # 68,8ms'ye CIKARDI (~%70 YAVASLAMA), hizlandirmadi. Nedeni: GPU
+            # tek bir paylasilan kaynak; 3 kucuk modelin (yolov8n) thread'ler
+            # arasinda GIL + CUDA baglam gecisi maliyeti, zaten hizli olan
+            # hesaplamadan daha pahaliya geliyor. Bu yuzden sirali yontem
+            # korunmustur (bkz. rapor - "denendi, gercek olcumle reddedildi").
+            for model_adi, model in modeller:
                 sonuclar = model.predict(
-                    frame, conf=config.CONFIDENCE_THRESHOLD, verbose=False
+                    frame, conf=config.MODEL_PREDICT_CONF, verbose=False
                 )[0]
-                for kutu in sonuclar.boxes:
-                    bir_tespiti_isle(frame, ariza_turu, kutu, cooldown, konum)
+                # Segmentasyon modeli (yolov8n-seg, sadece Cukur icin -
+                # Madde 8) hem kutu hem maske dondurur; kutu tabanli
+                # modellerde sonuclar.masks None olur.
+                maskeler = sonuclar.masks
+                for i, kutu in enumerate(sonuclar.boxes):
+                    maske_xy = maskeler.xy[i] if maskeler is not None else None
+                    bir_tespiti_isle(frame, model_adi, kutu, cooldown, konum, maske_xy)
 
             if config.SHOW_PREVIEW:
                 onizleme = kucult_onizleme(frame, max_genislik=1280)
